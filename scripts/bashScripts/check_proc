@@ -1,0 +1,39 @@
+#!/bin/bash
+GREEN="\033[4;32m"
+RED="\033[4;31m"
+WHITE="\033[0;37m"
+COLOR_OFF="\033[0m"
+ARG=$2
+PSAUXF=$(ps auxf | grep $1 | grep -v grep | grep -v $0)
+PIDS=$(ps auxf | grep $1 | grep -v grep | grep -v $0 | awk '{print $2}')
+
+if [[ ${PSAUXF} ]]; then
+    echo -e "${GREEN}Process is running.\n${WHITE}PID(s): "${PIDS[@]}"${COLOR_OFF}"
+else
+    echo -e "${RED}Process is not running${COLOR_OFF}"
+fi
+
+if [[ -z ${PSAUXF} ]];then
+    exit 0
+fi
+
+echo -e "Processes list:\n${PSAUXF}"
+echo -en "\ncommand to execute: kill ${ARG} "${PIDS[@]}"\n\n"
+
+echo -n "Kill procs?[No] "
+read choice
+
+case "${choice}" in
+y|yes)
+    EXEC=$(kill $ARG ${PIDS[@]})
+    if [[ $? == 0 ]]; then
+        echo -e "${GREEN}Killed sucessfully${COLOR_OFF}"
+    else
+        echo -e "${RED}Failed to kill processes${COLOR_OFF}"
+    fi
+;;
+n) echo -e "not killing..." ;;
+*) echo -e "not killing..." ;;
+esac
+
+exit $?

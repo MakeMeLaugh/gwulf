@@ -1,0 +1,8 @@
+#!/bin/bash
+INSTALLED_PATH="" # Put your PyCharm dir here
+if [[ -z $1 ]];then
+    arg=$(pwd)
+else
+    arg=$(pwd)/$1
+fi
+nohup ${INSTALLED_PATH}bin/pycharm.sh $arg > /dev/null 2>&1 &

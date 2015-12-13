@@ -1,0 +1,9 @@
+#!/bin/bash
+INSTALLED_PATH="" # Put your PhpStorm dir here
+if [[ -z $1 ]];then
+        arg=$(pwd)
+else
+        arg=$(pwd)/$1
+fi
+
+nohup ${INSTALLED_PATH}bin/phpstorm.sh $arg > /dev/null 2>&1 &
