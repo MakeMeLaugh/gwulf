@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #  -*- coding: utf-8 -*-
-import MySQLdb, csv, sys, os
+import MySQLdb, csv, sys, os, time
 from ConfigParser import SafeConfigParser
 
 
@@ -24,7 +24,7 @@ cursor.execute(tbl_fields)
 cursor.execute(query)
 res = cursor.fetchall()
 
-output_file = os.path.dirname(os.path.realpath(__file__)) + '/' + tbl + '.csv'
+output_file = config.get(CONFIG, 'save_path') + time.strftime("%Y_%b_%d_%H%M", time.localtime()) + '_' + CONFIG + '.csv'
 
 with open(output_file, 'wb') as csvfile:
     data_writer = csv.writer(csvfile, delimiter=';', quotechar='"', quoting=csv.QUOTE_ALL)
