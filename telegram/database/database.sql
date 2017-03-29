@@ -1,0 +1,2 @@
+CREATE DATABASE `telegram_bot` DEFAULT CHARACTER SET utf8
+;

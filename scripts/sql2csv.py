@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #  -*- coding: utf-8 -*-
 import MySQLdb, csv, sys, os, time
 from ConfigParser import SafeConfigParser
