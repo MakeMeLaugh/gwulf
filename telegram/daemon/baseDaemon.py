@@ -23,10 +23,9 @@ class Daemon(object):
         self.pidfile = pidfile
 
     def _test_pid_file(self):
-        """
-        Test if directory for pid file is writable
-        :return: void
-        """
+        """Test if directory for pidfile is writable"""
+
+        self._check_process_on_startup()
         if not path.isdir(path.dirname(self.pidfile)):
             try:
                 mkdir(path.dirname(self.pidfile))
@@ -41,12 +40,21 @@ class Daemon(object):
                 stderr.write("Startup failed: {errno} ({errmsg})\n".format(errno=e.errno, errmsg=e.strerror))
                 exit(e.errno)
 
+    def _check_process_on_startup(self):
+        """Check whether process with PID from pidfile exists in the system"""
+
+        try:
+            Process(self.get_pid()).is_running()
+        except NoSuchProcess:
+            self.delpid()
+
     def daemonize(self):
         """
         Do the UNIX double-fork magic, see Stevens' "Advanced
         Programming in the UNIX Environment" for details (ISBN 0201563177)
         http://www.erlenstar.demon.co.uk/unix/faq_2.html#SEC16
         """
+
         try:
             pid = fork()
             if pid > 0:
@@ -89,25 +97,30 @@ class Daemon(object):
         file(self.pidfile, 'w+').write("%s\n" % pid)
 
     def delpid(self):
+        """Delete pidfile"""
+
         remove(self.pidfile)
 
     def start(self):
         """Start the daemon"""
+
         # Check for a pidfile to see if the daemon already runs
+        self._test_pid_file()
         pid = self.get_pid()
 
         if pid:
             message = "pidfile {pid} already exist. Daemon already running?\n"
             stderr.write(message.format(pid=self.pidfile))
+            self._check_process_on_startup()
             exit(1)
 
         # Start the daemon
-        self._test_pid_file()
         self.daemonize()
         self.run()
 
     def stop(self):
         """Stop the daemon"""
+
         # Get the pid from the pidfile
         pid = self.get_pid()
 
@@ -127,37 +140,42 @@ class Daemon(object):
                 if path.exists(self.pidfile):
                     remove(self.pidfile)
             else:
-                print(str(err))
+                stderr.write(str(err))
                 exit(1)
 
     def restart(self):
         """Restart the daemon"""
+
         pid = self.get_pid()
         if pid:
-            print("Restarting process with pid: {}".format(pid))
+            stdout.write("Restarting process with pid: {}\n".format(pid))
         self.stop()
         self.start()
 
     def reload(self):
-        """Reload daemon's config"""
+        """Reload daemon's config
+        You need to implement reload config function on your own
+        This function actually just send SIGHUP (kill -1) to a process
+        with PID from pidfile
+        """
+
         pid = self.get_pid()
         if not pid:
             message = "pidfile {pid} does not exist. Daemon not running?\n"
             stderr.write(message.format(pid=self.pidfile))
             exit(1)  # Nothing to reload. Exiting
+
         try:
             if pid > 0:
-                print("Reloading process with pid: {} with sending SIGHUP signal".format(pid))
+                stdout.write("Reloading process with pid: {} with sending SIGHUP signal\n".format(pid))
                 kill(pid, 1)
         except OSError as err:
             print(err.strerror)
             exit(1)
 
     def get_pid(self):
-        """
-        Return pid of the running process
-        :return: int(pid)
-        """
+        """Return pid of the running process"""
+
         try:
             pf = file(self.pidfile, 'r')
             pid = int(pf.read().strip())
@@ -170,17 +188,17 @@ class Daemon(object):
     @staticmethod
     def get_info_template():
         return {"pid": "", "start_time": "", "binary": "", "status": "",
-                "cpu_times": namedtuple('pcputimes', ['user', 'system']), "cpu_procent": ""}
+                "cpu_times": namedtuple('pcputimes', ['user', 'system']),
+                "memory_info": namedtuple('pmem', ['rss', 'vms']), "cpu_percent": ""}
 
     def get_proc_info(self):
-        """
-        Return info about the daemon process for status method.
-        :return: dict(proc_info)
-        """
+        """Return info about the daemon process for status method"""
 
         info = self.get_info_template()
         info['cpu_times'].user = 0.0
         info['cpu_times'].system = 0.0
+        info['memory_info'].rss = 0
+        info['memory_info'].vms = 0
         info['pid'] = self.get_pid()
 
         if info['pid']:
@@ -193,14 +211,16 @@ class Daemon(object):
                     'create_time',
                     'cmdline',
                     'cpu_times',
-                    'cpu_percent'
+                    'cpu_percent',
+                    'memory_info'
                 ])
                 info['start_time'] = datetime.fromtimestamp(
                     proc_info['create_time']).strftime("%Y-%m-%d %H:%M:%S")
                 info['binary'] = proc_info['exe']
                 info['status'] = "Running/" + proc_info['status'].capitalize()
                 info['cpu_times'] = proc_info['cpu_times']
-                info['cpu_procent'] = proc_info['cpu_percent']
+                info['memory_info'] = proc_info['memory_info']
+                info['cpu_percent'] = proc_info['cpu_percent']
             except NoSuchProcess:
                 info['pid'] = ""
                 info['status'] = "Stopped/Not running"
@@ -214,10 +234,7 @@ class Daemon(object):
         return info
 
     def status(self):
-        """
-        Get the daemon status info string
-        :return str(status_info)
-        """
+        """Get the daemon status info string"""
 
         proc_info = self.get_proc_info()
 
@@ -231,6 +248,7 @@ class Daemon(object):
         STATE:\t\t{state}
         CPU_TIMES:\tuser: {user}/system: {system}
         CPU_PERCENT:\t{percent}
+        MEMORY USAGE:\tresident: {resident} kB/virtual: {virtual} kB
         STARTED AT:\t{start_time}
         """.format(name=path.realpath(argv[0]),
                    bin=proc_info['binary'],
@@ -241,12 +259,14 @@ class Daemon(object):
                    state=proc_info['status'],
                    user=proc_info['cpu_times'].user,
                    system=proc_info['cpu_times'].system,
-                   percent=proc_info['cpu_procent'],
+                   percent=proc_info['cpu_percent'],
+                   resident=proc_info['memory_info'].rss/1024,
+                   virtual=proc_info['memory_info'].vms/1024,
                    start_time=proc_info['start_time'])
         return status_info
 
     def run(self):
         """
-        You should override this method when you subclass Daemon. It will be called after the process has been
-        daemonized by start() or restart().
+        You should override this method when you subclass Daemon.
+        It will be called after the process has been daemonized by start() or restart().
         """

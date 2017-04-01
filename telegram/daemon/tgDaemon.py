@@ -48,7 +48,7 @@ def parse_arguments():
     try:
         opts = parser.parse_args()
     except UserWarning:
-        print(u"\033[91m{}\033[0m".format(u"Invalid arguments"))
+        print(u"\033[91mInvalid arguments\033[0m")
         parser.print_help()
         exit(1)
     return opts
@@ -57,6 +57,11 @@ def parse_arguments():
 if __name__ == '__main__':
     command = parse_arguments().cmd
     config = cfgHandler.CfgHandler().config
+
+    if not config['bot']['token'] or config['bot']['token'].find(':') < 0:
+        print("\033[91mBot token is empty in config: {}\033[0m".format(cfgHandler.CfgHandler().conf_file))
+        exit(1)
+
     c = TelegramBot(pidfile=config['bot']['pid_file'], stdin='/dev/null', stdout=config['log']['file'],
                     stderr=config['log']['file'])
 
