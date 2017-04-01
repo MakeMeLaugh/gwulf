@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 from subprocess import call, check_output
 from sys import argv
@@ -9,11 +9,11 @@ from redmine import Redmine, exceptions as e
 
 FILENAME = str(argv[0]).split('/')[len(str(argv[0]).split('/')) - 1]
 APPLICATION_PATH = str(path.dirname(check_output(['readlink', '-e', argv[0]])))
-API_KEY = ''  # API-ключ редмайна (см. свой профиль в RM)
-RM_URL = ''  # URL редмайна
-ICON = APPLICATION_PATH + '/rm.png'  # Иконка RM
+API_KEY = ''  # Redmine API-key (Check your Redmine profile page)
+RM_URL = ''  # Redmine URL
+ICON = APPLICATION_PATH + '/rm.png'  # Path to Redmine icon
 RM = Redmine(RM_URL, key=API_KEY)
-TASKS = RM.issue  # Объект Redmine.Issue - список задач
+TASKS = RM.issue  # Redmine.Issue object - list of tasks
 USAGE = """
     USAGE: %s [OPTIONS] ...
     \t-n\tget today tasks assigned to you
@@ -38,11 +38,11 @@ def notify(title, body):
 
 
 def today_tasks():
-    # project_id='-' - идентификатор корневого проекта (для просмотра задач по всем подпроектам)
-    # query_id - идентификатор сохраненного запроса в RM
+    # project_id='-' - Id of the root project (to able to search all subprojects)
+    # query_id - Id of custom search query
     my_tasks = TASKS.filter(project_id='-', query_id=69)
     if len(my_tasks) == 0:
-        return notify(":)", "Задач на сегодня нет")
+        return notify(":)", "No tasks for today")
     else:
         for task in my_tasks:
             title = str(task['id']) + "  " + \
@@ -63,16 +63,16 @@ def get_task():
     task_num = str(check_output(['xsel', '-o']))
     try:
         task = TASKS.get(task_num, include='journals')
-    except e.ResourceNotFoundError:
-        syslog.syslog(syslog.LOG_ERR, "#" + task_num, u'Задача не существует или удалена')
-        return notify("#" + task_num, u'Задача не существует или удалена')
-    except e.ForbiddenError:
-        syslog.syslog(syslog.LOG_ERR, "#" + task_num, u'У вас нет прав на просмотр данной страницы')
-        return notify("#" + task_num, u'У вас нет прав на просмотр данной страницы')
+    except e.ResourceNotFoundError as err:
+        syslog.syslog(syslog.LOG_ERR, "#" + task_num, err.message)
+        return notify("#" + task_num, err.message)
+    except e.ForbiddenError as err:
+        syslog.syslog(syslog.LOG_ERR, "#" + task_num, err.message)
+        return notify("#" + task_num, err.message)
 
     notes = task['journals']
 
-    # Валидируем отсутствующие свойства
+    # Validate missing attributes
     try:
         unicode(notes[(len(task['journals']) - 1)]['notes'])
         last_comment = u"-"
@@ -81,24 +81,24 @@ def get_task():
 
     try:
         last_comment_author = unicode(task['journals'][(len(task['journals']) - 1)]['user']['name'])
-    except e.ResourceAttrError:
-        syslog.syslog(syslog.LOG_INFO, "#" + task_num, u"Без автора О_о")
-        last_comment_author = u"Без автора О_о"
+    except e.ResourceAttrError as err:
+        syslog.syslog(syslog.LOG_INFO, "#" + task_num, err.message)
+        last_comment_author = err.message
 
     try:
         start_date = str(task['start_date'])
-    except e.ResourceAttrError:
-        syslog.syslog(syslog.LOG_INFO, "#" + task_num, u'Дата начала не была установлена')
-        start_date = u'Дата начала не была установлена'
+    except e.ResourceAttrError as err:
+        syslog.syslog(syslog.LOG_INFO, "#" + task_num, err.message)
+        start_date = err.message
 
-    # Устанавливаем тему и тело нотификации
+    # Set title and body of notification
     title = "#" + str(task['id']) + '  ' + str(task['created_on']) + " " + str(task['status'])
     body = task['subject'] + "\n" +\
-        u'Дата начала: ' + start_date + "\n" + u'Описание: ' +\
+        u'Start date: ' + start_date + "\n" + u'Description: ' +\
         unicode(task['description']) +\
         "\n\nURL: " + RM_URL + "/issues/" +\
-        str(task['id']) + u'\n\nПоследний комментарий:\n' +\
-        u'Автор: ' + last_comment_author + "\n" + last_comment
+        str(task['id']) + u'\n\nLast comment:\n' +\
+        u'Author: ' + last_comment_author + "\n" + last_comment
 
     return notify(title, body)
 
