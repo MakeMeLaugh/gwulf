@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 """
 Simple command-line tool to send email messages.
-Compatible with Python 2.7.12. Not tested under other versions.
+Compatible with Python 2.7.12. Not tested on other versions.
 bash_completion supported
-(Important note: bash_completion package is required for this to work (browse your OS repository):
-1. Make a symbolic PATH to this file
-(e.g. ln -snivf /path/to/emailSender.py /usr/local/bin/emailSend)
+Important note: bash_completion package is required for this to work (browse your OS repository.
+1. Make a symbolic link to this file somewhere on your PATH
+e.g.: ln -snivf /path/to/emailSender.py /usr/local/bin/emailSend
 2. Make a symbolic link to emailsend_completion.sh file
-(e.g. ln -snivf emailsend_completion.sh /etc/bash_completion.d/emailSend)
+e.g.: ln -snivf emailsend_completion.sh /etc/bash_completion.d/emailSend
+Important note: Link in /etc/bash_completion.d/ should have same name as your executable
 """
 
 from __future__ import print_function
@@ -18,7 +19,7 @@ from os.path import dirname, realpath, basename
 from time import strftime, localtime
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from ConfigParser import SafeConfigParser, NoOptionError
-from smtplib import SMTP, SMTPConnectError, SMTPResponseException, SMTPException, SMTPServerDisconnected
+from smtplib import SMTP, SMTPConnectError, SMTPResponseException, SMTPException, SMTPServerDisconnected, SMTPDataError
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.encoders import encode_base64
@@ -112,8 +113,16 @@ def send_mail(smtp_obj, mail_from, recipients, message, _iter):
             smtp_obj.set_debuglevel(DEBUG)
             smtp_obj.starttls()
             smtp_obj.login(USER, PASSWD)
-            smtp_obj.sendmail(mail_from, recipients, message.as_string())
-            return True
+            try:
+                # TODO::Check SMTP sendmail function response
+                smtp_obj.sendmail(mail_from, recipients, message.as_string())
+                return True
+            except SMTPDataError as er:
+                print("\033[91m{0}\t[ERROR]\t{1}\033[0m".format(
+                    strftime("%Y-%b-%d %H:%M:%S", localtime()),
+                    er.smtp_error if er.smtp_error else er.message
+                ))
+                exit(er.smtp_code)
         except SMTPResponseException as er:
             print("\033[91m{0}\t[ERROR]\t{1} Message not sent. Retries left: {2}\033[0m".format(
                 strftime("%Y-%b-%d %H:%M:%S", localtime()),
