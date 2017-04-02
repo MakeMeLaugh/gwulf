@@ -1,4 +1,4 @@
-#!/usr/bin/env python22
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
 Simple command-line tool to send email messages.
@@ -13,18 +13,33 @@ Important note: Link in /etc/bash_completion.d/ should have same name as your ex
 """
 
 from __future__ import print_function
+import logging
+from logging import handlers
+from smtplib import SMTP, SMTPConnectError, SMTPResponseException, SMTPException, SMTPServerDisconnected, SMTPDataError
+from os.path import dirname, realpath, basename
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
+from ConfigParser import SafeConfigParser, NoOptionError
 from sys import argv
 from os import unlink
-from os.path import dirname, realpath, basename
-from time import strftime, localtime
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
-from ConfigParser import SafeConfigParser, NoOptionError
-from smtplib import SMTP, SMTPConnectError, SMTPResponseException, SMTPException, SMTPServerDisconnected, SMTPDataError
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.encoders import encode_base64
-from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
-# TODO::Change print calls to logging module
+from socket import gaierror
+
+
+logger = logging.getLogger(basename(__file__).split('.')[0])
+logger.setLevel(logging.WARNING)
+formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] [%(message)s]')
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+stream_handler.setLevel(logging.DEBUG)
+logger.addHandler(stream_handler)
+
+syslog_handler = handlers.SysLogHandler()
+syslog_handler.setFormatter(formatter)
+logger.addHandler(syslog_handler)
 
 
 def parse_args():
@@ -71,9 +86,7 @@ def zip_attachments(files, archive_name):
 
     global compression
     global MAIL_ATTACHMENTS
-    print("\033[92m{0}\t[INFO]\tCreating zip archive with attachments.\033[0m".format(
-        strftime("%Y-%b-%d %H:%M:%S", localtime())
-    ))
+    logger.info("Creating zip archive with attachments.")
     with ZipFile(archive_name, mode='a') as zf:
         for f in files:
             zf.write(basename(f), compress_type=compression)
@@ -90,7 +103,7 @@ def attach_file(file_name, file_path):
     try:
         part.set_payload(open(file_path, "rb").read())
     except OSError as err:
-        print("\033[91m{0}\t[ERROR]\t{1}\033[0m".format(strftime("%Y-%b-%d %H:%M:%S", localtime()), err.strerror))
+        logger.error(err.strerror)
         return None
     encode_base64(part)
     part.add_header('Content-Disposition', 'attachment', filename=file_name)
@@ -105,8 +118,7 @@ def send_mail(smtp_obj, mail_from, recipients, message, _iter):
     global PASSWD
     global DEBUG
     if smtp_obj.__module__ != 'smtplib':
-        print("\033[91m{}\t[ERROR]\tsmtp_obj.__module__ != 'smtplib'\033[0m".format(
-            strftime("%Y-%b-%d %H:%M:%S", localtime())))
+        logger.error("smtp_obj.__module__ != 'smtplib'")
         exit(2)
     else:
         try:
@@ -118,26 +130,20 @@ def send_mail(smtp_obj, mail_from, recipients, message, _iter):
                 smtp_obj.sendmail(mail_from, recipients, message.as_string())
                 return True
             except SMTPDataError as er:
-                print("\033[91m{0}\t[ERROR]\t{1}\033[0m".format(
-                    strftime("%Y-%b-%d %H:%M:%S", localtime()),
-                    er.smtp_error if er.smtp_error else er.message
-                ))
+                logger.error(er.smtp_error if er.smtp_error else er.message)
                 exit(er.smtp_code)
         except SMTPResponseException as er:
-            print("\033[91m{0}\t[ERROR]\t{1} Message not sent. Retries left: {2}\033[0m".format(
-                strftime("%Y-%b-%d %H:%M:%S", localtime()),
+            logger.error("{}. Message not sent. Retries left: {}".format(
                 er.smtp_error if er.smtp_error else er.message, (10 - _iter)
             ))
             return False
         except SMTPException as er:
-            print("\033[91m{0}\t[ERROR]\t{1} Message not sent. Retries left: {2}\033[0m".format(
-                strftime("%Y-%b-%d %H:%M:%S", localtime()), er.message, (10 - _iter)
-            ))
+            logger.error("{}. Message not sent. Retries left: {}".format(er.message, (10 - _iter)))
             return False
         except RuntimeError as er:
-            print("\033[91m{0}\t[ERROR]\t{1} Message not sent. Exiting...\033[0m".format(
-                strftime("%Y-%b-%d %H:%M:%S", localtime()), er.message))
+            logger.error("{}. Message not sent. Exiting...".format(er.message))
             exit(2)
+
 
 # Read config file
 config = SafeConfigParser()
@@ -156,15 +162,13 @@ fully_filtered_args_keys = dict((a, b) for (a, b) in arguments.iteritems() if b 
                                 [None, False, [], 'MailServer', 'attachments.zip']).keys()
 
 if not fully_filtered_args_keys:
-    print("\033[91m{0}\t[ERROR]\tAt least '{1}' must be passed as arguments\033[0m".format(
-        strftime("%Y-%b-%d %H:%M:%S", localtime()), ', '.join(mandatory_args)))
+    logger.error("At least '{}' must be passed as arguments".format(', '.join(mandatory_args)))
     parser.print_help()
     exit(1)
 
 for arg in mandatory_args:
     if arg not in filtered_args_keys:
-        print("\033[91m{0}\t[ERROR]\t{1} must be passed as argument\033[0m".format(
-            strftime("%Y-%b-%d %H:%M:%S", localtime()), arg.capitalize()))
+        logger.error("{} must be passed as argument".format(arg.capitalize()))
         parser.print_help()
         exit(1)
 
@@ -205,8 +209,7 @@ if compress:
         compression = ZIP_DEFLATED
         MAIL_ATTACHMENTS = zip_attachments(MAIL_ATTACHMENTS, archive)
     except ImportError as e:
-        print("\033[91m{0}\t[WARNING]\t{1}. Archive will be made without compression\033[0m".format(
-                    strftime("%Y-%b-%d %H:%M:%S", localtime()), e.message))
+        logger.warning("{}. Archive will be made without compression".format(e.message))
         compression = ZIP_STORED
         MAIL_ATTACHMENTS = zip_attachments(MAIL_ATTACHMENTS, archive)
 
@@ -236,43 +239,37 @@ server = False
 # Try to auth on SMTP server
 while not server:
     if iteration == max_iterations:
-        print(
-            "\03391m{0}\t[ERROR]\tFailed to connect to SMTP server. Maximum number of iterations reached ({1})".format(
-                strftime("%Y-%b-%d %H:%M:%S", localtime()), max_iterations
-            ))
+        logger.error(
+            "Failed to connect to SMTP server. Maximum number of iterations reached ({})".format(max_iterations)
+        )
         exit(2)
     try:
         iteration += 1
         server = SMTP(MAIL_SERVER, MAIL_PORT)
-        print("\033[92m{0}\t[INFO]\tConnected to SMTP server.\033[0m".format(
-            strftime("%Y-%b-%d %H:%M:%S", localtime())
-        ))
+        logger.info("Connected to SMTP server.")
     except SMTPConnectError as e:
-        print("\033[91m{0}\t[ERROR]\t{1} Failed to auth on SMTP server. Retries left: {2}\033[0m".format(
-            strftime("%Y-%b-%d %H:%M:%S", localtime()), e.smtp_error, (max_iterations - iteration)))
+        logger.error("{}. Failed to auth on SMTP server. Retries left: {}".format(e.smtp_error,
+                                                                                 (max_iterations - iteration)))
     except SMTPServerDisconnected as e:
-        print("\033[91m{0}\t[ERROR]\t{1} Failed to auth on SMTP server. Retries left: {2}\033[0m".format(
-            strftime("%Y-%b-%d %H:%M:%S", localtime()), e.message, (max_iterations - iteration)))
+        logger.error("{}. Failed to auth on SMTP server. Retries left: {}".format(e.message,
+                                                                                 (max_iterations - iteration)))
+    except gaierror as e:
+        logger.error("{}. Failed to resolve SMTP server hostname. Exiting...".format(e.strerror))
+        exit(e.errno)
 
 iteration = 1
 send = False
 # Try to send email message
 while not send:
     if iteration == max_iterations:
-        print("\03391m{0}\t[ERROR]\tFailed to send message. Maximum number of iterations reached ({1})".format(
-            strftime("%Y-%b-%d %H:%M:%S", localtime()), max_iterations
-        ))
+        logger.error("Failed to send message. Maximum number of iterations reached ({})".format(max_iterations))
         exit(2)
     send = send_mail(server, MAIL_FROM, RECIPIENTS, msg, iteration)
     iteration += 1
 server.quit()
 
 if compress:
-    print("\033[92m{0}\t[INFO]\tRemoving attached archive: {1}\033[0m".format(
-        strftime("%Y-%b-%d %H:%M:%S", localtime()), realpath(MAIL_ATTACHMENTS[0])
-    ))
+    logger.info("Removing attached archive: {}".format(realpath(MAIL_ATTACHMENTS[0])))
     unlink(MAIL_ATTACHMENTS[0])
 
-print("\033[92m{0}\t[INFO]\tMessage successfully sent to: {1}\033[0m".format(
-    strftime("%Y-%b-%d %H:%M:%S", localtime()), ', '.join(RECIPIENTS),
-))
+logger.info("Message successfully sent to: {}".format(', '.join(RECIPIENTS)))
