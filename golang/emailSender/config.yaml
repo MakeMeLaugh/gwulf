@@ -1,0 +1,22 @@
+---
+mailserver:
+  host: mail.server.com
+  port: 465
+  username: domain\login
+  password: secret
+  from: login@domain.com
+  from_name: "Login"
+  localname: ""
+  debug: true
+  ssl: true
+
+section2:
+  host: exchange.mailserver.net
+  port: 587
+  username: domain\login
+  password: supersecret
+  from: login@domain.net
+  from_name: "Login"
+  localname: ""
+  debug: false
+  ssl: false

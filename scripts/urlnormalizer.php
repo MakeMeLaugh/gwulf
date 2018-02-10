@@ -28,7 +28,7 @@ if ($argc <= 1) {
             echo "\033[32m" . PHP_EOL . urldecode($argv[2]) . "\033[0m" . PHP_EOL . PHP_EOL;
         }
         exit(0);
-    } elseif ($argv[1] == '-v') {
+    } elseif ($argv[1] == '-h') {
         echo USAGE;
         exit(0);
     } else {

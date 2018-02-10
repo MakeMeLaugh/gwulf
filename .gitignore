@@ -58,3 +58,4 @@ target/
 
 # IDE stuff
 .idea/
+.vscode

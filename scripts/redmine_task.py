@@ -13,6 +13,7 @@ API_KEY = ''  # Redmine API-key (Check your Redmine profile page)
 RM_URL = ''  # Redmine URL
 ICON = APPLICATION_PATH + '/rm.png'  # Path to Redmine icon
 RM = Redmine(RM_URL, key=API_KEY)
+QUERY_ID = 69
 TASKS = RM.issue  # Redmine.Issue object - list of tasks
 USAGE = """
     USAGE: %s [OPTIONS] ...
@@ -40,7 +41,7 @@ def notify(title, body):
 def today_tasks():
     # project_id='-' - Id of the root project (to able to search all subprojects)
     # query_id - Id of custom search query
-    my_tasks = TASKS.filter(project_id='-', query_id=69)
+    my_tasks = TASKS.filter(project_id='-', query_id=QUERY_ID)
     if len(my_tasks) == 0:
         return notify(":)", "No tasks for today")
     else:

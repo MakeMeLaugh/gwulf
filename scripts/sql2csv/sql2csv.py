@@ -32,7 +32,7 @@ output_file = save_path + strftime("%Y_%b_%d_%H%M", localtime()) + '_' + CONFIG 
 print("Output in:", output_file)
 
 with open(output_file, 'wb') as csvfile:
-    data_writer = writer(csvfile, delimiter=',', quotechar='"', quoting=QUOTE_NONNUMERIC)
+    data_writer = writer(csvfile, delimiter=',', quotechar='"', escapechar='"', quoting=QUOTE_NONNUMERIC)
     data_writer.writerow(res[0].keys())
     for row in res:
         data_writer.writerow(row.values())
