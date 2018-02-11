@@ -26,6 +26,7 @@ var (
 	// bcc = kingpin.Flag("bcc", "Secret receipients list").Short('B').String()
 	// retry = kingpin.Flag("retry", "number of retries to send mail").Short('r').Default("1").Uint8()
 	// verbose = kingpin.Flag("verbose", "Turn on verbosity").Short('v').Bool()
+	// compress = kingpin.Flag("compress", "Compress the attachment(s)").Bool()
 )
 
 type Config struct {
