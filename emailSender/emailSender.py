@@ -4,7 +4,7 @@
 Simple command-line tool to send email messages.
 Compatible with Python 2.7.12. Not tested on other versions.
 bash_completion supported
-Important note: bash_completion package is required for this to work (browse your OS repository.
+Important note: bash_completion package is required for this to work (browse your OS repository).
 1. Make a symbolic link to this file somewhere on your PATH
 e.g.: ln -snivf /path/to/emailSender.py /usr/local/bin/emailSend
 2. Make a symbolic link to emailsend_completion.sh file
@@ -15,7 +15,7 @@ Important note: Link in /etc/bash_completion.d/ should have same name as your ex
 from __future__ import print_function
 import logging
 from logging import handlers
-from smtplib import SMTP, SMTPConnectError, SMTPResponseException, SMTPException, SMTPServerDisconnected, SMTPDataError
+from smtplib import SMTP, SMTPException, SMTPConnectError, SMTPDataError
 from os.path import dirname, realpath, basename, isfile
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from zipfile import ZipFile, ZIP_DEFLATED, ZIP_STORED
@@ -69,7 +69,7 @@ def parse_args():
     _parser.add_argument('-B', '--bcc', dest='bcc', action='append', default=[],
                          help=u"Email receivers ('Cc:' field)")
     # _parser.add_argument('-s', '--subject', dest='subject',
-                        #  help=u"Email subject ('Subject:' field)")
+    #                          help=u"Email subject ('Subject:' field)")
     # _parser.add_argument('-b', '--body', dest='body', help=u"Email body (HTML is supported)")
     _parser.add_argument('-a', '--attachment', dest='attachment', action='append', help=u"Path to attachment file")
     _parser.add_argument('-z', '--zip', dest='zip', action='store_true', help=u"Zip attachment file(-s)")
@@ -84,8 +84,8 @@ def parse_args():
     opts = _parser.parse_args()
 
     return_opts = {
-        'to': opts.to, 'cc': opts.cc, 'bcc': opts.bcc, 'subject': opts.subject, 'body': opts.body, 'attachment': opts.attachment,
-        'debug': opts.debug, 'zip': opts.zip, 'zip_name': opts.zip_name,
+        'to': opts.to, 'cc': opts.cc, 'bcc': opts.bcc, 'subject': opts.subject, 'body': opts.body,
+        'attachment': opts.attachment, 'debug': opts.debug, 'zip': opts.zip, 'zip_name': opts.zip_name,
         'config': opts.config, 'list_config': opts.list_config
     }
 
@@ -98,8 +98,8 @@ def read_config():
     return c
 
 
-def zip_attachments(_files, _archive_name, compression):
-    """Zip email attachments into archive"""
+def _zip_attachments(_files, _archive_name, compression):
+    """zip_attachment zip all mail attachments into one archive"""
 
     logger.info("Creating zip archive with attachments.")
     with ZipFile(_archive_name, mode='a') as zf:
@@ -110,6 +110,8 @@ def zip_attachments(_files, _archive_name, compression):
 
 
 def archive_attachments(files, archive_name):
+    """archive_attachments wraps _zip_attachment method"""
+
     try:
         __import__('zlib')
         compression = ZIP_DEFLATED
@@ -117,11 +119,11 @@ def archive_attachments(files, archive_name):
         logger.warning("{0}. Archive will be made without compression".format(e.message))
         compression = ZIP_STORED
 
-    return zip_attachments(files, archive_name, compression)
+    return _zip_attachments(files, archive_name, compression)
 
 
 def attach_file(file_name, file_path):
-    """Construct MIMEBase object for attachment file"""
+    """attach_file creates MIMEBase object with attachment"""
 
     if not file_name and not file_path:
         return None
@@ -137,55 +139,62 @@ def attach_file(file_name, file_path):
     return part
 
 
-def connect_to_relay(max_tries, host, port):
+def connect_to_relay(host, port, max_tries):
+    """connect_to_relay connects to SMTP server"""
+
     _iteration = 0
     _server = False
     while not _server:
+        _iteration += 1
         if _iteration == max_tries:
             logger.error(
                 "Failed to connect to SMTP server. Maximum number of iterations reached ({0})".format(max_tries)
             )
             exit(2)
         try:
-            _iteration += 1
             _server = SMTP(host, port)
             logger.info("Connected to SMTP server.")
         except SMTPConnectError as e:
-            logger.error("{0}. Failed to auth on SMTP server. Retries left: {1}".format(e.smtp_error,
+            logger.error("{0}. Failed to connect to SMTP server. Retries left: {1}".format(e.smtp_error,
                                                                                         (max_tries - _iteration)))
-        except SMTPServerDisconnected as e:
-            logger.error("{0}. Failed to auth on SMTP server. Retries left: {1}".format(e.message,
-                                                                                        (max_tries - _iteration)))
+            sleep(5)
         except gaierror as e:
             logger.error("{0}. Failed to resolve SMTP server hostname. Exiting...".format(e.strerror))
             exit(e.errno)
 
-        sleep(5)
-
     return _server
 
 
-def log_in_to_relay(smtp_obj, user, password, debug=False):
-    try:
-        smtp_obj.set_debuglevel(debug)
-        smtp_obj.starttls()
-        smtp_obj.login(user, password)
-    except SMTPResponseException as er:
-        logger.error("{0}. Message not sent. Retries left: {1}".format(
-            er.smtp_error if er.smtp_error else er.message, (10 - _iter)
-        ))
+def log_in_to_relay(smtp_obj, user, password, _iterations, debug=False):
+    """log_in_to_relay authenticates on SMTP server"""
+    _iter = 0
+    (code, resp) = (None, None)
+    while _iter <= _iterations:
+        _iter += 1
+        try:
+            smtp_obj.set_debuglevel(debug)
+            smtp_obj.starttls()
+            code, resp = smtp_obj.login(user, password)
+        except SMTPException as e:
+            logger.error("{0}. Failed to log in to SMTP server. Retries left: {1}".format(
+                e.message, (_iterations - _iter)
+            ))
+            _iter += 1
+            sleep(5)
+        except RuntimeError as e:
+            logger.error("{0}. Message not sent. Exiting...".format(e.message))
+            exit(2)
+        if code in (235, 503):  # Successful auth/already authorized
+            break
+
+    if code in (235, 503):
+        return smtp_obj
+    else:
         return False
-    except SMTPException as er:
-        logger.error("{0}. Message not sent. Retries left: {1}".format(er.message, (10 - _iter)))
-        return False
-    except RuntimeError as er:
-        logger.error("{0}. Message not sent. Exiting...".format(er.message))
-        exit(2)
-    return smtp_obj
 
 
 def send_mail(smtp_obj, mail_from, recipients, message, _iter):
-    """Sends email message via passed SMTP object"""
+    """send_mail sends email message via passed SMTP object"""
 
     if smtp_obj.__module__ != 'smtplib':
         logger.error("smtp_obj.__module__ != 'smtplib'")
@@ -200,8 +209,6 @@ def send_mail(smtp_obj, mail_from, recipients, message, _iter):
             exit(er.smtp_code)
 
 
-# TODO::Add BCC
-
 # Read config file
 config = read_config()
 
@@ -214,6 +221,7 @@ if arguments['list_config']:
 # Defining the constants
 MAIL_TO = arguments['to']
 MAIL_COPY = arguments['cc']
+MAIL_BCC = arguments['bcc']
 MAIL_SUBJECT = arguments['subject']
 MAIL_BODY = arguments['body']
 if isfile(MAIL_BODY):
@@ -244,6 +252,12 @@ msg['To'] = ', '.join(MAIL_TO)
 msg['Cc'] = ', '.join(MAIL_COPY)
 RECIPIENTS = MAIL_TO + MAIL_COPY
 
+if arguments['bcc']:
+    # https://tools.ietf.org/html/rfc2822#section-5
+    # Recipients - list of addresses for RCPT command within MTA transmission
+    # Bcc addresses shouldn't be placed under DATA section (msg/MultiPart object)
+    RECIPIENTS += MAIL_BCC
+
 if compress:
     MAIL_ATTACHMENTS = archive_attachments(MAIL_ATTACHMENTS, archive)
 
@@ -268,21 +282,22 @@ if attachments:
 
 msg.attach(body_part)
 
-# server = False
-server = connect_to_relay(host=MAIL_SERVER, port=MAIL_PORT, max_tries=max_iterations)
-
 iteration = 1
+server = False
 send = False
 # Try to send email message
-while not send:
+while not send or not server:
+
     if iteration == max_iterations:
         logger.error("Failed to send message. Maximum number of iterations reached ({0})".format(max_iterations))
         exit(2)
-    server = log_in_to_relay(server, USER, PASSWD, DEBUG)
+    server = connect_to_relay(MAIL_SERVER, MAIL_PORT, max_iterations)
+    server = log_in_to_relay(server, USER, PASSWD, DEBUG, max_iterations)
     send = send_mail(server, MAIL_FROM, RECIPIENTS, msg, iteration)
     iteration += 1
 server.quit()
 
+# We don't need that archive anymore
 if compress:
     logger.info("Removing attached archive: {0}".format(realpath(MAIL_ATTACHMENTS[0])))
     unlink(MAIL_ATTACHMENTS[0])
